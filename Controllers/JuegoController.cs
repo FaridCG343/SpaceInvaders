@@ -4,11 +4,13 @@ using SpaceInvaders.Properties;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Media;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using WMPLib;
 
 namespace SpaceInvaders.Controllers
 {
@@ -17,7 +19,7 @@ namespace SpaceInvaders.Controllers
         public List<Enemigo> enemigos;
         public List<Proyectil> proyectiles;
         public PictureBox pbNave;
-        private Thread ?moverProyectilesThread, cooldownThread, moverEnemigosThread, moverMejoraThread;
+        private Thread? moverProyectilesThread, cooldownThread, moverEnemigosThread, moverMejoraThread;
         private CancellationTokenSource juegoTokenSource;
         private bool ataqueEnCooldown = false;
         private readonly Random rmEnemy = new();
@@ -25,14 +27,26 @@ namespace SpaceInvaders.Controllers
         private PictureBox pbVidas;
         private Label lblVidas;
         private Label lblFuerza;
+        private Label lblScore;
         private PictureBox pbFuerza;
+        private WMPLib.WindowsMediaPlayer player;
+        private SoundPlayer playerDisparar;
         public JuegoController(List<Enemigo> enemigos, List<Proyectil> proyectiles, PictureBox pbNave, Form form)
         {
             this.form = form;
+            player = new WMPLib.WindowsMediaPlayer();
+            string relativePath = @"..\..\..\Resources\Voxel Revolution.mp3";
+            string absolutePath = Path.GetFullPath(relativePath);
+            player.URL = absolutePath;
+            playerDisparar = new(Resources.Shoot);
+            player.settings.setMode("loop", true);
+            player.controls.play();
+            player.settings.volume = 75;
             Program.nave.SetPictureBox(pbNave);
             pbVidas = new PictureBox();
             lblVidas = new Label();
             lblFuerza = new Label();
+            lblScore = new Label();
             pbFuerza = new PictureBox();
             InicializarComponentes();
             ActualizarLabels();
@@ -47,9 +61,9 @@ namespace SpaceInvaders.Controllers
             this.pbNave.Enabled = false;
             juegoTokenSource = new();
             cooldownThread = new(() => Cooldown());
-            //moverEnemigosThread = new(()=>MoverEnemigos(juegoTokenSource.Token));
+            moverEnemigosThread = new(()=>MoverEnemigos(juegoTokenSource.Token));
             Program.nave.HacerInvulnerable();
-            //moverEnemigosThread.Start();
+            moverEnemigosThread.Start();
             form.MouseMove += Form_MouseMove;
             form.FormClosed += Form_FormClosed;
             form.MouseClick += Form_MouseClick;
@@ -104,11 +118,23 @@ namespace SpaceInvaders.Controllers
             pbFuerza.SizeMode = PictureBoxSizeMode.StretchImage;
             pbFuerza.TabIndex = 4;
             pbFuerza.TabStop = false;
+            //
+            // lblScore
+            //
+            lblScore.AutoSize = true;
+            lblScore.BackColor = Color.Transparent;
+            lblScore.ForeColor = Color.White;
+            lblScore.Location = new Point(770, 9);
+            lblScore.Name = "lblScore";
+            lblScore.Size = new Size(102, 15);
+            lblScore.TabIndex = 1;
+            lblScore.Text = "Score: 0";
 
             form.Controls.Add(lblFuerza);
             form.Controls.Add(pbFuerza);
             form.Controls.Add(lblVidas);
             form.Controls.Add(pbVidas);
+            form.Controls.Add(lblScore);
             form.ResumeLayout(false);
             form.PerformLayout();
         }
@@ -117,6 +143,7 @@ namespace SpaceInvaders.Controllers
         {
             lblFuerza.Text = $"x{Program.nave.Ataque}";
             lblVidas.Text = $"x{Program.nave.Vida}";
+            lblScore.Text = $"Score: {Program.nave.Score}";
         }
         public bool HayColision(Rectangle objeto1, Rectangle objeto2)
         {
@@ -126,6 +153,7 @@ namespace SpaceInvaders.Controllers
         public void Ganar()
         {
             MessageBox.Show("Has ganado uwu");
+            player.controls.stop();
             form.Invoke((MethodInvoker)delegate {
                 if (form is FormLevel1)
                 {
@@ -158,6 +186,7 @@ namespace SpaceInvaders.Controllers
 
         public void Perder()
         {
+            player.controls.stop();
             MessageBox.Show("Has perdido unu");
             form.Hide();
             Program.level = null;
@@ -177,22 +206,22 @@ namespace SpaceInvaders.Controllers
                 {
                     if (!enemigo.IsDeath())
                     {
-                        //if (HayColision(enemigo.Bounds, pbNave.Bounds))
-                        //{
-                        //    Program.nave.TakeDamage();
-                        //    ActualizarLabels();
-                        //    if (Program.nave.IsDeath())
-                        //    {
-                        //        Perder();
-                        //    }
-                        //}
+                        if (HayColision(enemigo.Bounds, pbNave.Bounds))
+                        {
+                            Program.nave.TakeDamage();
+                            ActualizarLabels();
+                            if (Program.nave.IsDeath())
+                            {
+                                Perder();
+                            }
+                        }
                         enemigo.Mover();
                     }
                     
                 }
                 form.ResumeLayout(false);
-                form.PerformLayout();
                 Thread.Sleep(250);
+                Application.DoEvents();
             }while (!token.IsCancellationRequested);
         }
         public void MoverMejora(Mejora mejora, CancellationToken token)
@@ -231,6 +260,8 @@ namespace SpaceInvaders.Controllers
                                 RemovePb(pbProyectil);
                                 if (enemigo.IsDeath())
                                 {
+                                    Program.nave.UpdateScore(enemigo.Puntos);
+                                    ActualizarLabels();
                                     enemigos.Remove(enemigo);
                                     Mejora? mejora = enemigo.GetMejora();
                                     if (mejora != null)
@@ -258,12 +289,15 @@ namespace SpaceInvaders.Controllers
                 {
                     if (HayColision(pbNave.Bounds, pbProyectil.Bounds))
                     {
-                        RemovePb(pbProyectil);
-                        Program.nave.TakeDamage();
-                        ActualizarLabels();
-                        if (Program.nave.IsDeath())
+                        if (!Program.nave.IsDeath())
                         {
-                            Perder();
+                            RemovePb(pbProyectil);
+                            Program.nave.TakeDamage();
+                            ActualizarLabels();
+                            if (Program.nave.IsDeath())
+                            {
+                                Perder();
+                            }
                         }
                         return;
                     }
@@ -321,6 +355,7 @@ namespace SpaceInvaders.Controllers
             {
                 Point pos = new(pbNave.Location.X + (pbNave.Width / 2), pbNave.Location.Y);
                 ProyectilNave proyectil = new(pos);
+                playerDisparar.Play();
                 proyectiles.Add(proyectil);
                 form.Controls.Add(proyectil.GetPictureBox());
                 ataqueEnCooldown = true;
@@ -334,6 +369,7 @@ namespace SpaceInvaders.Controllers
         public void Form_FormClosed(object? sender, FormClosedEventArgs e)
         {
             juegoTokenSource.Cancel();
+            player.controls.stop();
             Application.Exit();
         }
         #endregion

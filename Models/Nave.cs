@@ -17,6 +17,8 @@ namespace SpaceInvaders.Models
         public bool EscudoActivo { get; set; }
         public bool Muerto { get; set; }
         public int Ataque { get; set; }
+        public int Score { get; set; }
+        private int _score;
         public Thread invulnerabilidadTimer;
 
         public Nave()
@@ -28,6 +30,8 @@ namespace SpaceInvaders.Models
             EscudoActivo = false;
             Muerto = false;
             Ataque = 1;
+            Score = 0;
+            _score = 1000;
             invulnerabilidadTimer = new( () => InvulnerableTimer());
         }
 
@@ -69,6 +73,16 @@ namespace SpaceInvaders.Models
         {
             EscudoActivo = false;
             UpdateImage();
+        }
+
+        public void UpdateScore(int score)
+        {
+            Score+= score;
+            if (Score - _score >= 0)
+            {
+                _score += 1000;
+                UpdateVida(1);
+            }
         }
 
         public void SetPictureBox(PictureBox pb)

@@ -25,7 +25,8 @@ public abstract class Enemigo
     public int ProbabilidadDeDrop { get; set; }
     public List<Mejora> Mejoras { get; set; }
     private Mejora? mejora;
-    public Enemigo(int vida, Point loc, Size s, PictureBox pb, double prob, Point desde, Point hasta, int movX, int movY, int probabilidadDeDrop = 0)
+    public int Puntos { get; set; }
+    public Enemigo(int vida, Point loc, Size s, PictureBox pb, double prob, Point desde, Point hasta, int movX, int movY, int probabilidadDeDrop = 0, int puntos = 0)
     {
         pb.Location = loc;
         pb.Size = s;
@@ -52,6 +53,7 @@ public abstract class Enemigo
             new MejoraInvencibilidad(pos),
             new MejoraEscudo(pos)
         };
+        Puntos = puntos;
     }
 
     public void Mover()
